@@ -132,17 +132,19 @@ class Board:
                 gem.current_y = -((empty_slots - r) * TILE_SIZE)
                 self.grid[r][c] = gem
     def resolve_matches(self):
-        total_cleared = 0
+        """Clear matches until stable. Returns points earned (cascade multiplied)."""
+        points = 0
+        cascade = 0
         while True:
             matches = self.find_matches()
             if not matches:
                 break
-            total_cleared += len(matches)
+            cascade += 1
+            points += len(matches) * 10 * cascade  # combo multiplier x1, x2, x3...
             for r, c in matches:
                 self.grid[r][c] = None
             self.drop_and_refill()
-        return total_cleared
-
+        return points
     def process_swap(self, pos1, pos2):
         if not self.is_adjacent(pos1, pos2) or self.is_game_over() or self.is_animating():
             return False
@@ -155,8 +157,7 @@ class Board:
             return False
 
         self.moves_remaining -= 1
-        cleared = self.resolve_matches()
-        self.score += cleared * 10
+        self.score += self.resolve_matches()
         return True
     def is_game_over(self):
         return self.score >= self.target_score or self.moves_remaining <= 0
