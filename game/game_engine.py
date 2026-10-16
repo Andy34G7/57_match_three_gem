@@ -15,6 +15,7 @@ class GameEngine:
         self.font_small = pygame.font.SysFont(None, 24)
 
     def handle_click(self, mouse_pos):
+        self.board.touch()
         if self.board.is_game_over() or self.board.is_animating():
             return
 

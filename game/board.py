@@ -3,6 +3,7 @@ import random
 import pygame
 
 GRID_SIZE = 8
+HINT_DELAY_MS = 5000
 TILE_SIZE = 60
 GEM_COLORS = [
     (220, 50, 50),   # Red
@@ -46,12 +47,15 @@ class Board:
         self.selected = None
         self.score = 0
         self.moves_remaining = max_moves
+        self.last_input = pygame.time.get_ticks()
+        self.hint = None
         self.reset()
 
     def reset(self):
         self.score = 0
         self.moves_remaining = self.max_moves
         self.selected = None
+        self.touch()
         for r in range(GRID_SIZE):
             for c in range(GRID_SIZE):
                 color = random.choice(GEM_COLORS)
@@ -90,6 +94,11 @@ class Board:
         r2, c2 = pos2
         return abs(r1 - r2) + abs(c1 - c2) == 1
 
+    def touch(self):
+        """Register player activity: restarts the idle timer and hides the hint."""
+        self.last_input = pygame.time.get_ticks()
+        self.hint = None
+
     def scan_runs(self):
         """Return all straight runs of 3+ same-colour gems as (cells, orientation)."""
         runs = []
@@ -120,6 +129,21 @@ class Board:
         for cells, _ in self.scan_runs():
             matched.update(cells)
         return matched
+
+    def find_hint(self):
+        """Find an adjacent swap that would create a match, or None."""
+        for r in range(GRID_SIZE):
+            for c in range(GRID_SIZE):
+                for dr, dc in ((0, 1), (1, 0)):
+                    r2, c2 = r + dr, c + dc
+                    if r2 >= GRID_SIZE or c2 >= GRID_SIZE:
+                        continue
+                    self.swap_gems((r, c), (r2, c2))
+                    found = bool(self.find_matches())
+                    self.swap_gems((r, c), (r2, c2))
+                    if found:
+                        return (r, c), (r2, c2)
+        return None
 
     def drop_and_refill(self):
         for c in range(GRID_SIZE):
@@ -218,6 +242,9 @@ class Board:
                 if self.grid[r][c]:
                     self.grid[r][c].update()
 
+        idle = pygame.time.get_ticks() - self.last_input
+        if idle > HINT_DELAY_MS and self.hint is None and not self.is_game_over() and not self.is_animating():
+            self.hint = self.find_hint()
 
     def render(self, surface):
         board_rect = pygame.Rect(
@@ -251,6 +278,21 @@ class Board:
                             pygame.draw.line(surface, (255, 255, 255), (x + 10, cy), (x + TILE_SIZE - 10, cy), 5)
                         else:
                             pygame.draw.line(surface, (255, 255, 255), (cx, y + 10), (cx, y + TILE_SIZE - 10), 5)
+
+                if self.hint and (r, c) in self.hint:
+                    hx = self.offset_x + c * TILE_SIZE
+                    hy = self.offset_y + r * TILE_SIZE
+                    hint_rect = pygame.Rect(hx + 2, hy + 2, TILE_SIZE - 4, TILE_SIZE - 4)
+                    overlay = pygame.Surface(hint_rect.size, pygame.SRCALPHA)
+                    pygame.draw.rect(
+                        overlay, (255, 255, 255, int(40 + 110 * pulse)),
+                        overlay.get_rect(), border_radius=10,
+                    )
+                    surface.blit(overlay, hint_rect.topleft)
+                    pygame.draw.rect(
+                        surface, (255, 240, 120), hint_rect.inflate(int(6 * pulse), int(6 * pulse)),
+                        width=3, border_radius=10,
+                    )
 
                 if self.selected == (r, c):
                     sel_x = self.offset_x + c * TILE_SIZE
